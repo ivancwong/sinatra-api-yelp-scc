@@ -2,7 +2,7 @@ source 'https://rubygems.org'
 gem 'sinatra'
 gem "sinatra-cross_origin", "~> 0.3.1"
 
-gem 'json'
+gem 'json', "1.7.7"
 gem 'data_mapper'
 
 # When developing an app locally you can use SQLite which is a relational

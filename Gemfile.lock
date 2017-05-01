@@ -79,7 +79,7 @@ DEPENDENCIES
   data_mapper
   dm-postgres-adapter
   dm-sqlite-adapter
-  json
+  json (= 1.7.7)
   sinatra
   sinatra-cross_origin (~> 0.3.1)
 
