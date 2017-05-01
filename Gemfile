@@ -21,6 +21,11 @@ gem 'data_mapper'
 #end
 
 #  Load postgres adapter
-gem 'pg', :group => :production
-gem 'dm-postgres-adapter', :group => :production
+#gem 'pg', :group => :production
+#gem 'dm-postgres-adapter', :group => :production
 gem 'dm-sqlite-adapter', :group => :development
+
+
+#  Always Load postgres adapter
+gem 'pg'
+gem 'dm-postgres-adapter'
