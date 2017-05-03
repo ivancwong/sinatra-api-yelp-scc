@@ -5,17 +5,28 @@
   <script src="http://code.jquery.com/jquery-1.9.1.min.js"></script>
   <script>
     $(document).ready(function () {
-      // Load THINGS data immediately
+      // Load Businesses data immediately
       $.ajax({
         url: '/businesses',
         method: 'GET'
       }).done(function (data) {
         data.forEach(function (d) {
-          $('#things-index').append("<p><strong>" + d.yelp_id + "</strong>: " + d.yelp_name + "</p>");
+          $('#business-index').append("<p><strong>" + d.yelp_id + "</strong>: " + d.yelp_name + "</p>");
         });
       });
 
-      // Form to create a new Thing
+        // Load Reviews data immediately
+        $.ajax({
+            url: '/reviews',
+            method: 'GET'
+        }).done(function (data) {
+            data.forEach(function (d) {
+                $('#review-index').append("<p><strong>" + d.yelp_id + "</strong>: " + d.yelp_user_name + "  Text: " + d.text + "</p>");
+            });
+        });
+
+
+        // Form to create a new Thing
       $('#new-submit').click(function () {
         var data = {};
 
@@ -38,8 +49,12 @@
   </script>
 </head>
 <body>
-  <div id="things-index">
+  <div id="business-index">
     <h2>All Business</h2>
+  </div>
+
+  <div id="review-index">
+      <h2>All Review</h2>
   </div>
 
 

@@ -60,9 +60,17 @@ configure do
   enable :cross_origin
 end
 
+
+# =========================== Routes for Service Status Check index.html Page ===================================
+
+
 get '/' do
   send_file './public/index.html'
 end
+
+
+
+# =========================== Routes for Review ===================================
 
 # Route to show all businesses, ordered like a blog
 get '/businesses' do
@@ -72,7 +80,7 @@ get '/businesses' do
   @businesses.to_json
 end
 
-# CREATE: Route to create a new Thing
+# CREATE: Route to create a new Business
 post '/businesses' do
   content_type :json
 
@@ -92,7 +100,7 @@ post '/businesses' do
   end
 end
 
-# READ: Route to show a specific Thing based on its `id`
+# READ: Route to show a specific Business based on its `id`
 get '/businesses/:id' do
   content_type :json
   @business = Business.get(params[:id].to_i)
@@ -104,7 +112,7 @@ get '/businesses/:id' do
   end
 end
 
-# UPDATE: Route to update a Thing
+# UPDATE: Route to update a Business
 put '/businesses/:id' do
   content_type :json
 
@@ -126,7 +134,7 @@ put '/businesses/:id' do
   end
 end
 
-# DELETE: Route to delete a Thing
+# DELETE: Route to delete a Business
 delete '/businesses/:id/delete' do
   content_type :json
   @business = Business.get(params[:id].to_i)
@@ -137,6 +145,88 @@ delete '/businesses/:id/delete' do
     halt 500
   end
 end
+
+
+# =========================== Routes for Review ===================================
+
+# Route to show all reviews, ordered like a blog
+get '/reviews' do
+  content_type :json
+  @reviews = Review.all(:order => :created_at.desc)
+
+  @reviews.to_json
+end
+
+# CREATE: Route to create a new Reviews
+post '/reviews' do
+  content_type :json
+
+  # These next commented lines are for if you are using Backbone.js
+  # JSON is sent in the body of the http request. We need to parse the body
+  # from a string into JSON
+  # params_json = JSON.parse(request.body.read)
+
+  # If you are using jQuery's ajax functions, the data goes through in the
+  # params.
+  @review = Review.new(params)
+
+  if @review.save
+    @review.to_json
+  else
+    halt 500
+  end
+end
+
+# READ: Route to show a specific Reviews based on its `id`
+get '/reviews/:id' do
+  content_type :json
+  @review = Review.get(params[:id].to_i)
+
+  if @review
+    @review.to_json
+  else
+    halt 404
+  end
+end
+
+# UPDATE: Route to update a Reviews
+put '/reviews/:id' do
+  content_type :json
+
+  # These next commented lines are for if you are using Backbone.js
+  # JSON is sent in the body of the http request. We need to parse the body
+  # from a string into JSON
+  # params_json = JSON.parse(request.body.read)
+
+  # If you are using jQuery's ajax functions, the data goes through in the
+  # params.
+
+  @review = Review.get(params[:id].to_i)
+  @review.update(params)
+
+  if @review.save
+    @review.to_json
+  else
+    halt 500
+  end
+end
+
+# DELETE: Route to delete a Reviews
+delete '/reviews/:id/delete' do
+  content_type :json
+  @review = Review.get(params[:id].to_i)
+
+  if @review.destroy
+    {:success => "ok"}.to_json
+  else
+    halt 500
+  end
+end
+
+
+
+
+# ===========================  Seed Database  ===================================
 
 
 # If there are no Business in the database, add a few.
@@ -184,6 +274,7 @@ if Business.count == 0
                   :coordinates_longitude => -122.407821655273)
 end
 
+# If there are no Review in the database, add a few.
 
 if Review.count == 0
   # Using save command to get debugging code.
