@@ -3,6 +3,13 @@
 require 'sinatra'
 require 'sinatra/cross_origin'
 require 'bundler'
+
+# Yelp Code
+require "json"
+require "http"
+# require "optparse"
+# end Yelp Code
+
 Bundler.require
 
 
@@ -70,7 +77,7 @@ end
 
 
 
-# =========================== Routes for Review ===================================
+# =========================== Routes for Business ===================================
 
 # Route to show all businesses, ordered like a blog
 get '/businesses' do
@@ -98,6 +105,7 @@ post '/businesses' do
   else
     halt 500
   end
+
 end
 
 # READ: Route to show a specific Business based on its `id`
@@ -110,6 +118,17 @@ get '/businesses/:id' do
   else
     halt 404
   end
+
+  # ========  Refresh Reviews and Update database using the Business ID (yelp_id)
+
+  puts "I am the Yelp Business ID =  " + @business['yelp_id']
+  # ===============================================
+  # Making a call for review lookup and refresh Database
+  yelp_review_lookup(@business['yelp_id'])
+  # end of Making a call for review lookup
+
+  # ===============================================
+
 end
 
 # UPDATE: Route to update a Business
@@ -306,3 +325,356 @@ if Review.count == 0
                  :business_review_count =>  10)
 
 end
+
+
+# ================= Yelp Code =============
+
+
+# Place holders for Yelp Fusion's OAuth 2.0 credentials. Grab them
+# from https://www.yelp.com/developers/v3/manage_app
+CLIENT_ID = "GgaSroKMoHb0bSSkfVFEfw"
+CLIENT_SECRET = "BmyB64vaBNSjlk125W5irUpPDobx0DnMLT4DaRIlQFDFDJL7WSmD4j3KWhI578r3"
+
+
+# Constants, do not change these
+API_HOST = "https://api.yelp.com"
+SEARCH_PATH = "/v3/businesses/search"
+BUSINESS_PATH = "/v3/businesses/"  # trailing / because we append the business id to the path
+TOKEN_PATH = "/oauth2/token"
+GRANT_TYPE = "client_credentials"
+
+
+DEFAULT_BUSINESS_ID = "yelp-san-francisco"
+DEFAULT_TERM = "dinner"
+DEFAULT_LOCATION = "San Francisco, CA"
+SEARCH_LIMIT = 5
+
+
+# Make a request to the Fusion API token endpoint to get the access token.
+#
+# host - the API's host
+# path - the oauth2 token path
+#
+# Examples
+#
+#   bearer_token
+#   # => "Bearer some_fake_access_token"
+#
+# Returns your access token
+def bearer_token
+  # Put the url together
+  url = "#{API_HOST}#{TOKEN_PATH}"
+
+  raise "Please set your CLIENT_ID" if CLIENT_ID.nil?
+  raise "Please set your CLIENT_SECRET" if CLIENT_SECRET.nil?
+
+  # Build our params hash
+  params = {
+      client_id: CLIENT_ID,
+      client_secret: CLIENT_SECRET,
+      grant_type: GRANT_TYPE
+  }
+
+  response = HTTP.post(url, params: params)
+  parsed = response.parse
+
+  "#{parsed['token_type']} #{parsed['access_token']}"
+end
+
+
+# Make a request to the Fusion search endpoint. Full documentation is online at:
+# https://www.yelp.com/developers/documentation/v3/business_search
+#
+# term - search term used to find businesses
+# location - what geographic location the search should happen
+#
+# Examples
+#
+#   search("burrito", "san francisco")
+#   # => {
+#          "total": 1000000,
+#          "businesses": [
+#            "name": "El Farolito"
+#            ...
+#          ]
+#        }
+#
+#   search("sea food", "Seattle")
+#   # => {
+#          "total": 1432,
+#          "businesses": [
+#            "name": "Taylor Shellfish Farms"
+#            ...
+#          ]
+#        }
+#
+# Returns a parsed json object of the request
+def search(term, location)
+  url = "#{API_HOST}#{SEARCH_PATH}"
+  params = {
+      term: term,
+      location: location,
+      limit: SEARCH_LIMIT
+  }
+
+  response = HTTP.auth(bearer_token).get(url, params: params)
+  response.parse
+end
+
+# ===============================================
+# Look up a business by a given business id. Full documentation is online at:
+# https://www.yelp.com/developers/documentation/v3/business
+#
+# business_id - a string business id
+#
+# Examples
+#
+#   business("yelp-san-francisco")
+#   # => {
+#          "name": "Yelp",
+#          "id": "yelp-san-francisco"
+#          ...
+#        }
+#
+# Returns a parsed json object of the request
+def business(business_id)
+  url = "#{API_HOST}#{BUSINESS_PATH}#{business_id}"
+
+  response = HTTP.auth(bearer_token).get(url)
+  response.parse
+end
+
+
+# ===============================================
+# Look up a review by a given business id. Full documentation is online at:
+# https://www.yelp.com/developers/documentation/v3/business/reviews
+#
+# business_id - a string business id
+#
+# Examples
+#
+#   business("yelp-san-francisco")
+#   # => {
+#          "name": "Yelp",
+#          "id": "yelp-san-francisco"
+#          ...
+#        }
+#
+# Returns a parsed json object of the request
+def review(business_id)
+  url = "#{API_HOST}#{BUSINESS_PATH}#{business_id}" + "/reviews"
+
+  response = HTTP.auth(bearer_token).get(url)
+  response.parse
+end
+
+
+
+
+# ===============================================
+# Function for Yelp Business Look up using Yelp Business ID.
+def yelp_business_lookup(business_id)
+    response = business(business_id)
+
+    puts "Found business with id #{business_id}:"
+    puts JSON.pretty_generate(response)
+
+    puts response
+
+    puts response['id']
+    puts response['name']
+    puts response['image_url']
+    puts response['photos'][0]
+    puts response['photos'][1]
+    puts response['photos'][2]
+    puts response['coordinates']['latitude']
+    puts response['coordinates']['longitude']
+    puts response['price']
+
+
+    #puts response['photos[1]']
+    #puts response['photos[2]']
+
+    #puts response['coordinates]['latitude']
+
+
+    # Using create command to create record in one-short if the Business record not exists in the database.
+    count = Business.count(:yelp_id => response['id'])
+    puts "Business Record Count with this ID = " + count.to_s
+
+    if Business.count(:yelp_id => response['id']) == 0
+
+      Business.create(:yelp_id => response['id'],
+                      :yelp_name =>  response['name'],
+                      :image_url => response['image_url'],
+                      :is_claimed => response['is_claimed'],
+                      :is_closed => response['is_closed'],
+                      :url => response['url'],
+                      :price => '$$$$',
+                      :rating => response['rating'],
+                      :review_count => response['review_count'],
+                      :phone => response['phone'],
+                      :photo1_url =>  response['photos'][0],
+                      :photo2_url =>  response['photos'][1],
+                      :photo3_url =>  response['photos'][2],
+                      :coordinates_latitude => response['coordinates']['latitude'],
+                      :coordinates_longitude => response['coordinates']['longitude']
+                      )
+    end
+end
+# end of Yelp Business Look Up Function
+# ===============================================
+
+
+
+# ===============================================
+# Function for Yelp Business Look up using Yelp Business ID.
+def yelp_review_lookup(business_id)
+
+    response = review(business_id)
+
+    puts "Found review with id #{business_id}:"
+    puts JSON.pretty_generate(response)
+
+
+    # Print 1st Review
+    puts response['reviews'][0]['url']
+    puts response['reviews'][0]['text']
+    puts response['reviews'][0]['rating']
+    puts response['reviews'][0]['user']['image_url']
+    puts response['reviews'][0]['user']['name']
+    puts response['reviews'][0]['time_created']
+    puts response['total']
+
+    # Using create command to create record in one-short if the Reviews record not exists in the database.
+    count0 = Review.count(:yelp_id => business_id, :review_created_at => response['reviews'][0]['time_created'])
+    puts "Review Record [0] Count0 with this ID and Timestamp= " + count0.to_s
+
+    count1 = Review.count(:yelp_id => business_id, :review_created_at => response['reviews'][1]['time_created'])
+    puts "Review Record [1] Count1 with this ID and Timestamp= " + count1.to_s
+
+    count2 = Review.count(:yelp_id => business_id, :review_created_at => response['reviews'][2]['time_created'])
+    puts "Review Record [2] Count2 with this ID and Timestamp= " + count2.to_s
+
+
+    if Review.count(:yelp_id => business_id, :review_created_at => response['reviews'][0]['time_created']) == 0
+
+      Review.create( :yelp_id => business_id,
+                     :rating => response['reviews'][0]['rating'],
+                     :yelp_user_image_url =>  response['reviews'][0]['user']['image_url'],
+                     :yelp_user_name => response['reviews'][0]['user']['name'],
+                     :text => response['reviews'][0]['text'],
+                     :review_created_at => response['reviews'][0]['time_created'],
+                     :business_url => response['reviews'][0]['url'],
+                     :business_review_count =>  response['total']
+                    )
+    end
+
+    if Review.count(:yelp_id => business_id, :review_created_at => response['reviews'][1]['time_created']) == 0
+
+      Review.create( :yelp_id => business_id,
+                     :rating => response['reviews'][1]['rating'],
+                     :yelp_user_image_url =>  response['reviews'][1]['user']['image_url'],
+                     :yelp_user_name => response['reviews'][1]['user']['name'],
+                     :text => response['reviews'][1]['text'],
+                     :review_created_at => response['reviews'][1]['time_created'],
+                     :business_url => response['reviews'][1]['url'],
+                     :business_review_count =>  response['total']
+      )
+    end
+
+    if Review.count(:yelp_id => business_id, :review_created_at => response['reviews'][2]['time_created']) == 0
+
+      Review.create( :yelp_id => business_id,
+                     :rating => response['reviews'][2]['rating'],
+                     :yelp_user_image_url =>  response['reviews'][2]['user']['image_url'],
+                     :yelp_user_name => response['reviews'][2]['user']['name'],
+                     :text => response['reviews'][2]['text'],
+                     :review_created_at => response['reviews'][2]['time_created'],
+                     :business_url => response['reviews'][2]['url'],
+                     :business_review_count =>  response['total']
+      )
+    end
+end
+
+# end of Making a call for review lookup
+# ===============================================
+
+
+
+
+
+=begin
+
+
+options = {}
+OptionParser.new do |opts|
+  opts.banner = "Example usage: ruby sample.rb (search|lookup) [options]"
+
+  opts.on("-tTERM", "--term=TERM", "Search term (for search)") do |term|
+    options[:term] = term
+  end
+
+  opts.on("-lLOCATION", "--location=LOCATION", "Search location (for search)") do |location|
+    options[:location] = location
+  end
+
+  opts.on("-bBUSINESS_ID", "--business-id=BUSINESS_ID", "Business id (for lookup)") do |id|
+    options[:business_id] = id
+  end
+
+  opts.on("-h", "--help", "Prints this help") do
+    puts opts
+    exit
+  end
+end.parse!
+
+
+command = ARGV
+
+
+case command.first
+  when "search"
+    term = options.fetch(:term, DEFAULT_TERM)
+    location = options.fetch(:location, DEFAULT_LOCATION)
+
+    raise "business_id is not a valid parameter for searching" if options.key?(:business_id)
+
+    response = search(term, location)
+
+    puts "Found #{response["total"]} businesses. Listing #{SEARCH_LIMIT}:"
+    response["businesses"].each {|biz| puts biz["name"]}
+  when "lookup"
+    business_id = options.fetch(:business_id, DEFAULT_BUSINESS_ID)
+
+
+    raise "term is not a valid parameter for lookup" if options.key?(:term)
+    raise "location is not a valid parameter for lookup" if options.key?(:lookup)
+
+    response = business(business_id)
+
+    puts "Found business with id #{business_id}:"
+    puts JSON.pretty_generate(response)
+  else
+    puts "Please specify a command: search or lookup"
+end
+
+=end
+
+# ============== End Yelp Code =============
+
+
+
+# ===============================================
+# Making a call for business lookup
+business_id = DEFAULT_BUSINESS_ID
+yelp_business_lookup(business_id)
+# end of Making a call for business lookup
+# ===============================================
+
+# ===============================================
+# Making a call for review lookup
+business_id = DEFAULT_BUSINESS_ID
+yelp_review_lookup(business_id)
+# end of Making a call for review lookup
+# ===============================================
