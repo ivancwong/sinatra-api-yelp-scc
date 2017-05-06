@@ -113,12 +113,6 @@ get '/businesses/:id' do
   content_type :json
   @business = Business.get(params[:id].to_i)
 
-  if @business
-    @business.to_json
-  else
-    halt 404
-  end
-
   # ========  Refresh Reviews and Update database using the Business ID (yelp_id)
 
   puts "I am the Yelp Business ID =  " + @business['yelp_id']
@@ -128,6 +122,13 @@ get '/businesses/:id' do
   # end of Making a call for review lookup
 
   # ===============================================
+
+  if @business
+    @business.to_json
+  else
+    halt 404
+  end
+
 
 end
 
