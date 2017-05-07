@@ -82,10 +82,13 @@ end
 # Route to show all businesses, ordered like a blog
 get '/businesses' do
   content_type :json
-  @businesses = Business.all(:order => :created_at.desc)
+  # @businesses = Business.all(:order => :created_at.desc)
+  @businesses = Business.all(:order => :yelp_id.asc)
 
   @businesses.to_json
 end
+
+
 
 # CREATE: Route to create a new Business
 post '/businesses' do
@@ -132,6 +135,38 @@ get '/businesses/:id' do
 
 end
 
+
+# READ: Route to show a specific Business based on its `yelp_id`
+get '/businesses_by_yelp_id/:yelp_id' do
+  content_type :json
+  #@business = Business.get(params[:yelp_id])
+  #@business = Business.get(:yelp_id => params[:yelp_id])
+
+  @businesses = Business.all(:yelp_id => params[:yelp_id])
+
+
+  # ========  Refresh Reviews and Update database using the Business ID (yelp_id)
+
+  puts "I am the Yelp Business ID =  " + @businesses[0]['yelp_id']
+  # ===============================================
+  # Making a call for review lookup and refresh Database
+  yelp_review_lookup(@businesses[0]['yelp_id'])
+  # end of Making a call for review lookup
+
+  # ===============================================
+
+  if @businesses
+    @businesses.to_json
+  else
+    halt 404
+  end
+
+
+end
+
+
+
+
 # UPDATE: Route to update a Business
 put '/businesses/:id' do
   content_type :json
@@ -177,6 +212,17 @@ get '/reviews' do
   @reviews.to_json
 end
 
+
+# READ: Route to show All Reviews based on its `yelp_id`
+get '/reviews_by_yelp_id/:yelp_id' do
+  content_type :json
+  @reviews = Review.all(:yelp_id => params[:yelp_id], :order => :review_created_at.desc)
+
+  @reviews.to_json
+
+end
+
+
 # CREATE: Route to create a new Reviews
 post '/reviews' do
   content_type :json
@@ -197,6 +243,7 @@ post '/reviews' do
   end
 end
 
+
 # READ: Route to show a specific Reviews based on its `id`
 get '/reviews/:id' do
   content_type :json
@@ -208,6 +255,10 @@ get '/reviews/:id' do
     halt 404
   end
 end
+
+
+
+
 
 # UPDATE: Route to update a Reviews
 put '/reviews/:id' do
