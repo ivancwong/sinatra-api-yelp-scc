@@ -857,13 +857,14 @@ def azure_review_update(business_id)
       puts parsedResponse['description']['captions'][0]['confidence']
     end
 
-    puts parsedResponse['faces']
+    if !parsedResponse['faces'].nil?
+      puts parsedResponse['faces']
+      puts parsedResponse['faces'][0].nil?
 
-    puts parsedResponse['faces'][0].nil?
-
-    if !parsedResponse['faces'][0].nil?
-      puts parsedResponse['faces'][0]['gender']
-      puts parsedResponse['faces'][0]['age']
+      if !parsedResponse['faces'][0].nil?
+        puts parsedResponse['faces'][0]['gender']
+        puts parsedResponse['faces'][0]['age']
+      end
     end
 
     # Assign to variables -- Ready for DB update.
@@ -875,12 +876,14 @@ def azure_review_update(business_id)
       @vision_description_captions_confidence = nil
     end
 
-    if !parsedResponse['faces'][0].nil?
-      @vision_gender = parsedResponse['faces'][0]['gender']
-      @vision_age = parsedResponse['faces'][0]['age']
-    else
-      @vision_gender = nil
-      @vision_age = nil
+    if !parsedResponse['faces'].nil?
+      if !parsedResponse['faces'][0].nil?
+        @vision_gender = parsedResponse['faces'][0]['gender']
+        @vision_age = parsedResponse['faces'][0]['age']
+      else
+        @vision_gender = nil
+        @vision_age = nil
+      end
     end
 
     # ============ End Vision (Face) Analysis =======================
@@ -1048,7 +1051,7 @@ def azure_review_update(business_id)
       @sentiment_scores = nil
 
    # ========== End Review Record Update =============================
-    
+
   end
 
 
