@@ -10,6 +10,10 @@ require "http"
 # require "optparse"
 # end Yelp Code
 
+# Azure code
+require 'net/http'
+# end Azure code
+
 Bundler.require
 
 
@@ -54,6 +58,14 @@ class Review
   property :review_created_at, DateTime
   property :business_url, String, :length =>255
   property :business_review_count, Integer
+  property :vision_gender, String
+  property :vision_age, Integer
+  property :vision_description_captions, Text
+  property :vision_description_captions_confidence, Float
+  property :emotion, String
+  property :emotion_scores, Float
+  property :sentiment, String
+  property :sentiment_scores, Float
 end
 
 # Finalize the DataMapper models.
@@ -126,6 +138,16 @@ get '/businesses/:id' do
 
   # ===============================================
 
+=begin
+  # ===============================================
+  # Making a call for review Azure Analytics and refresh Database
+  # update Review Vision, Emotion, and Text Analysis using Business Yelp_ID
+  azure_review_update(@business['yelp_id'])
+  # end of Making a call for Azure Analytics
+
+  # ===============================================
+=end
+
   if @business
     @business.to_json
   else
@@ -152,6 +174,14 @@ get '/businesses_by_yelp_id/:yelp_id' do
   # Making a call for review lookup and refresh Database
   yelp_review_lookup(@businesses[0]['yelp_id'])
   # end of Making a call for review lookup
+
+  # ===============================================
+
+  # ===============================================
+  # Making a call for review Azure Analytics and refresh Database
+  # update Review Vision, Emotion, and Text Analysis using Business Yelp_ID
+  azure_review_update(@businesses[0]['yelp_id'])
+  # end of Making a call for Azure Analytics
 
   # ===============================================
 
@@ -717,6 +747,316 @@ end
 
 
 
+# ========== Azure Code =========================
+
+# update Review Vision, Emotion, and Text Analysis using Business Yelp_ID
+def azure_review_update(business_id)
+
+  # ======== Read from Database ===============
+  @Reviews = Review.all(:yelp_id => business_id, :sentiment_scores => nil)
+
+  # ======== Print Number of Reivew(s) to be processed ==========
+
+  puts "======== Print Number of Reivew(s) to be processed.  Number of Record =  #{@Reviews.count} =========="
+
+  # ========= Header Visual Analysis ============
+  uri = URI('https://westus.api.cognitive.microsoft.com/vision/v1.0/analyze')
+  uri.query = URI.encode_www_form({
+                                      # Request parameters
+                                      'visualFeatures' => 'Categories,Tags,Description,Faces,ImageType,Color,Adult',
+                                      'details' => 'Celebrities,Landmarks',
+                                      'language' => 'en'
+                                  })
+
+
+  request = Net::HTTP::Post.new(uri.request_uri)
+  # Request headers
+  request['Content-Type'] = 'application/json'
+  # Request headers
+  request['Ocp-Apim-Subscription-Key'] = 'd4382bec65e949019e4dc0c22930c68a'
+  # ========= End Header Visual Analysis ============
+
+
+  # ========= Header Emotion Analysis ============
+  emotionUri = URI('https://westus.api.cognitive.microsoft.com/emotion/v1.0/recognize')
+  emotionUri.query = URI.encode_www_form({
+                                      # Request parameters
+
+                                  })
+
+
+  emotionRequest = Net::HTTP::Post.new(emotionUri.request_uri)
+  # Request headers
+  emotionRequest['Content-Type'] = 'application/json'
+  # Request headers
+  emotionRequest['Ocp-Apim-Subscription-Key'] = 'd97338a9cba2478eaeef18c5ba3906d1'
+  # ========= End Header Emotion Analysis ============
+
+
+  # ========= Header TEXT Analysis ============
+  textUri =  URI('https://westus.api.cognitive.microsoft.com/text/analytics/v2.0/sentiment')
+  textUri.query = URI.encode_www_form({
+                                          # Request parameters
+
+                                      })
+
+
+  textRequest = Net::HTTP::Post.new(textUri.request_uri)
+  # Request headers
+  textRequest['Content-Type'] = 'application/json'
+  # Request headers
+  textRequest['Ocp-Apim-Subscription-Key'] = '5aca8bc9567f4d709a7c6a0940f56df6'
+  # ========= End Header TEXT Analysis ============
+
+
+  @Reviews.each do |a|
+
+    puts "ID: #{a.id}   Name: #{a.yelp_user_name}."
+
+# ========= Begin Azure Analysis ============
+
+    # ============ Vision (Face) Analysis =======================
+
+    @id = a.id
+    @yelp_user_image_url    = a.yelp_user_image_url
+    @reviewText = a.text
+
+    # Request body
+    # request.body = '{ "url": "https://s3-media1.fl.yelpcdn.com/photo/vZHtYkONDFEkm6E7KJW1_w/o.jpg"}'
+
+    @reqString = '{ "url": "' + @yelp_user_image_url  + '" }'
+
+    puts "========= Print Request String ========"
+    puts @reqString
+    request.body = @reqString
+
+    response = Net::HTTP.start(uri.host, uri.port, :use_ssl => uri.scheme == 'https') do |http|
+      http.request(request)
+    end
+
+    puts response.body
+
+    parsedResponse = JSON.parse(response.body)
+
+    puts "========== Print out Parsed Request ============"
+
+    puts parsedResponse
+
+    puts parsedResponse.keys
+
+    puts "========== Print out the attributes =============="
+    puts !parsedResponse['categories'].nil?
+
+    if !parsedResponse['categories'].nil?
+      puts parsedResponse['categories']
+      puts parsedResponse['categories'][0]['name']
+      puts parsedResponse['categories'][0]['score']
+
+      puts parsedResponse['description']['captions']
+      puts parsedResponse['description']['captions'][0]['text']
+      puts parsedResponse['description']['captions'][0]['confidence']
+    end
+
+    puts parsedResponse['faces']
+
+    puts parsedResponse['faces'][0].nil?
+
+    if !parsedResponse['faces'][0].nil?
+      puts parsedResponse['faces'][0]['gender']
+      puts parsedResponse['faces'][0]['age']
+    end
+
+    # Assign to variables -- Ready for DB update.
+    if !parsedResponse['categories'].nil?
+    @vision_description_captions = parsedResponse['description']['captions'][0]['text']
+    @vision_description_captions_confidence = parsedResponse['description']['captions'][0]['confidence']
+    else
+      @vision_description_captions = nil
+      @vision_description_captions_confidence = nil
+    end
+
+    if !parsedResponse['faces'][0].nil?
+      @vision_gender = parsedResponse['faces'][0]['gender']
+      @vision_age = parsedResponse['faces'][0]['age']
+    else
+      @vision_gender = nil
+      @vision_age = nil
+    end
+
+    # ============ End Vision (Face) Analysis =======================
+
+    # =========== Emotion Analysis ===================================
+
+    @emotionReqString = '{ "url": "' + @yelp_user_image_url  + '" }'
+
+    puts "========= Print Request String ========"
+    puts @emotionReqString
+    emotionRequest.body = @emotionReqString
+
+    emotionResponse = Net::HTTP.start(emotionUri.host, emotionUri.port, :use_ssl => emotionUri.scheme == 'https') do |http|
+      http.request(emotionRequest)
+    end
+
+    puts emotionResponse.body
+
+    parsedEmotionResponse = JSON.parse(emotionResponse.body)
+
+    puts "========== Print out EMOTION Parsed Request ============"
+
+    puts parsedEmotionResponse
+
+    puts parsedEmotionResponse[0].nil?
+
+    if !parsedEmotionResponse[0].nil?
+       puts parsedEmotionResponse[0].keys
+       puts parsedEmotionResponse[0]['scores']
+       puts parsedEmotionResponse[0]['scores'].keys[0]
+       puts parsedEmotionResponse[0]['scores'][0]
+
+
+
+       puts "%.20f" % parsedEmotionResponse[0]['scores']['anger'].to_f
+       puts "%.20f" % parsedEmotionResponse[0]['scores']['contempt'].to_f
+       puts "%.20f" % parsedEmotionResponse[0]['scores']['disgust'].to_f
+       puts "%.20f" % parsedEmotionResponse[0]['scores']['fear'].to_f
+       puts "%.20f" % parsedEmotionResponse[0]['scores']['happiness'].to_f
+       puts "%.20f" % parsedEmotionResponse[0]['scores']['neutral'].to_f
+       puts "%.20f" % parsedEmotionResponse[0]['scores']['sadness'].to_f
+       puts "%.20f" % parsedEmotionResponse[0]['scores']['surprise'].to_f
+
+
+
+       emotionArray = [
+           [parsedEmotionResponse[0]['scores'].keys[0], "%.20f" % parsedEmotionResponse[0]['scores']['anger'].to_f],
+           [parsedEmotionResponse[0]['scores'].keys[1], "%.20f" % parsedEmotionResponse[0]['scores']['contempt'].to_f],
+           [parsedEmotionResponse[0]['scores'].keys[2], "%.20f" % parsedEmotionResponse[0]['scores']['disgust'].to_f],
+           [parsedEmotionResponse[0]['scores'].keys[3], "%.20f" % parsedEmotionResponse[0]['scores']['fear'].to_f],
+           [parsedEmotionResponse[0]['scores'].keys[4], "%.20f" % parsedEmotionResponse[0]['scores']['happiness'].to_f],
+           [parsedEmotionResponse[0]['scores'].keys[5], "%.20f" % parsedEmotionResponse[0]['scores']['neutral'].to_f],
+           [parsedEmotionResponse[0]['scores'].keys[6], "%.20f" % parsedEmotionResponse[0]['scores']['sadness'].to_f],
+           [parsedEmotionResponse[0]['scores'].keys[7], "%.20f" % parsedEmotionResponse[0]['scores']['surprise'].to_f]
+       ]
+
+
+
+
+
+       emotionArray.each do |(x, y)|
+         puts "x =  #{x}  y =  #{y}"
+       end
+
+       sortedEmotionArray = emotionArray.sort_by(&:last).reverse
+
+       sortedEmotionArray.each do |(x, y)|
+         puts "SORTED x =  #{x}  y =  #{y}"
+       end
+
+       puts sortedEmotionArray[0][0]
+       puts sortedEmotionArray[0][1]
+       @emotion = sortedEmotionArray[0][0]
+       @emotion_scores= sortedEmotionArray[0][1]
+
+
+    end
+
+    # =========== End Emotion Analysis ===================================
+
+    # =========== TEXT Analysis ===================================
+
+    @myString = @reviewText
+
+
+    puts @myString.gsub('"', '\"')        # Escape Double quote ( " )
+    puts @myString.gsub("'", "\\\\'")     # Escape Single quot ( ' )
+
+    puts "======= Print subtString ======"
+
+    @subtString =  @myString.gsub('"', '\"')     # Escape Double quote ( " )
+    @subtString =  @subtString.gsub("'", "\\\\'")   # Escape Single quot ( ' )
+
+    puts @subtString
+
+
+    @textReqString = '{ "documents": [{"id": "1","text": "' + @subtString + '" }]}'
+
+    puts "========= Print Request String ========"
+    puts @textReqString
+    textRequest.body = @textReqString
+
+    textResponse = Net::HTTP.start(textUri.host, textUri.port, :use_ssl => textUri.scheme == 'https') do |http|
+      http.request(textRequest)
+    end
+
+    puts textResponse.body
+
+    parsedtextResponse = JSON.parse(textResponse.body)
+
+    puts "========== Print out text Parsed Request ============"
+
+    puts parsedtextResponse
+
+    puts parsedtextResponse.nil?
+
+    if !parsedtextResponse.nil?
+      puts parsedtextResponse.keys
+      puts parsedtextResponse['documents'][0]['score']
+    end
+
+
+    if  parsedtextResponse['documents'][0]['score'].to_f <= 0.33333 then
+      puts "Negative"
+      @sentiment = "Negative"
+
+    elsif parsedtextResponse['documents'][0]['score'].to_f >= 0.66666 then
+      puts "Positive"
+      @sentiment = "Positive"
+
+    elsif parsedtextResponse['documents'][0]['score'].to_f > 0.33333 &&
+          parsedtextResponse['documents'][0]['score'].to_f < 0.66666 then
+      puts "neutral"
+      @sentiment = "neutral"
+    end
+
+
+    @sentiment_scores =  parsedtextResponse['documents'][0]['score']
+
+
+   # =========== End TEXT Analysis ===================================
+
+# ========= End Azure Analysis ============
+
+   # ============ Review Record Update ===============================
+
+    a.update(:vision_gender => @vision_gender,
+             :vision_age => @vision_age,
+             :vision_description_captions => @vision_description_captions,
+             :vision_description_captions_confidence => @vision_description_captions_confidence,
+             :emotion => @emotion,
+             :emotion_scores => @emotion_scores,
+             :sentiment => @sentiment,
+             :sentiment_scores => @sentiment_scores
+    )
+
+    # RESET All Variables
+      @vision_gender = nil
+      @vision_age = nil
+      @@vision_description_captions = nil
+      @vision_description_captions_confidence = nil
+      @emotion = nil
+      @emotion_scores = nil
+      @sentiment = nil
+      @sentiment_scores = nil
+
+   # ========== End Review Record Update =============================
+    
+  end
+
+
+end
+
+
+# ========= End Azure Code =====================
+
 # ===============================================
 # Making a call for business lookup
 business_id = DEFAULT_BUSINESS_ID
@@ -729,4 +1069,13 @@ yelp_business_lookup(business_id)
 business_id = DEFAULT_BUSINESS_ID
 yelp_review_lookup(business_id)
 # end of Making a call for review lookup
+# ===============================================
+
+# ===============================================
+# Making a call for review Azure Analytics and refresh Database
+# update Review Vision, Emotion, and Text Analysis using Business Yelp_ID
+business_id = DEFAULT_BUSINESS_ID
+azure_review_update(business_id)
+# end of Making a call for Azure Analytics
+
 # ===============================================
